@@ -5,6 +5,7 @@
 #include <array>
 #include <vector>
 #include <set>
+#include <limits>
 
 
 // ----- Point ----- //
@@ -55,6 +56,7 @@ class StateTreeNode{
         friend class DecisionMaker;
     private: 
         int player;
+        float value;
         Point placement;
         StateTreeNode *parent;
         std::vector<StateTreeNode> childs;
@@ -144,10 +146,10 @@ class DecisionMaker{
         ~DecisionMaker();
         void find_next_step();
     private:
-        void create_tree(StateTreeNode &node, int depth, int curr_playe);
+        void create_tree(StateTreeNode &node, int depth, int curr_player);
         void get_all_possible_steps();
         void init_directions();
-
+        float alpha_beta_pruning(StateTreeNode &node, int depth, float alpha, float beta, bool is_player);
         //basic information
         int player;
         int enemy;
@@ -187,7 +189,12 @@ void DecisionMaker::find_next_step(){
     create_tree(root, 1, player);
 
     //use alpha-beta pruning to get next step
-
+    float final_value = alpha_beta_pruning(root, 1, -std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), true);
+    for(auto child:root.childs){
+        if(child.value == final_value){
+            fout << child.placement.x << ' ' << child.placement.y << std::endl;
+        }
+    }
 }
 
 void DecisionMaker::create_tree(StateTreeNode &node, int depth, int curr_player){
@@ -252,6 +259,44 @@ void DecisionMaker::get_all_possible_steps(){
     }
 }
 
+float DecisionMaker::alpha_beta_pruning(StateTreeNode &node, int depth, float alpha, float beta, bool is_player){
+    if(depth >= DEPTH){
+        Evaluator evaluator(board.board);
+        return evaluator.evaluate();
+    }
+    if(is_player){
+        float value = -std::numeric_limits<float>::max();
+        for(auto child:node.childs){
+            value = std::max(value, alpha_beta_pruning(child, depth+1, alpha, beta, false));
+            alpha = std::max(alpha, value);
+            if(alpha >= beta){
+                //beta will have the memory of all the child form the node parents(siblings)
+                //if alpha is bigger means that the player will have better score at this path
+                //so the enemy won't choose this path
+                break;
+            }
+        }
+        node.value = value;
+        return value;
+    }
+    else{
+        //for enemies turn the smaller the points the better
+        float value = std::numeric_limits<float>::max();
+        for(auto child:node.childs){
+            value = std::min(value, alpha_beta_pruning(child, depth+1, alpha, beta, true));
+            beta = std::min(beta, value);
+            if(beta <= alpha){
+                //alpha will have the memory of the nodes siblings
+                //if beta is small means the player won't want this path
+                //cause the enemy can go to a better board, compared to the other sibling paths in the tree that is visited before
+                break;
+            }
+        }
+        node.value = value;
+        return value;
+    }
+}
+
 void DecisionMaker::init_directions(){
     directions.push_back(Point(-2, 2));
     directions.push_back(Point(-1, 2));
@@ -289,10 +334,10 @@ class Evaluator{
     //Get a map state and output its score
     public:
         Evaluator() {};
-        Evaluator(std::vector<std::vector<int>> &board);
-        int evaluate();
+        Evaluator(const std::vector<std::vector<int>> &board);
+        float evaluate();
     private:
-        void get_lines(std::vector<std::vector<int>> &board);
+        void get_lines(const std::vector<std::vector<int>> &board);
         int evaluate_line(std::vector<int> &line);
         std::vector<std::vector<int>> horizontal_lines = std::vector<std::vector<int>>(15); //for lines "-"
         std::vector<std::vector<int>> vertical_lines = std::vector<std::vector<int>>(15);   //for lines "|"
