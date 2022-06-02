@@ -243,6 +243,7 @@ DecisionMaker::~DecisionMaker(){
     fout.close();
 }
 
+
 void DecisionMaker::find_next_step(){
     //create tree
     get_all_possible_steps();
