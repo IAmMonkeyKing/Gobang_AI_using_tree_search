@@ -5,6 +5,7 @@
 #include <array>
 #include <vector>
 #include <set>
+#include <map>
 #include <limits>
 #include <string>
 
@@ -179,7 +180,7 @@ enum SITUATION{
 
 class PlayerScore{
     public:
-        PlayerScore();
+        PlayerScore() {};
         PlayerScore(int size, int player);
         friend class Evaluator;
     private:
@@ -199,10 +200,11 @@ class Evaluator{
         Evaluator(int size, int player);
         float evaluate(const std::vector<std::vector<int>> &board);
     private:
-        bool evaluate_piece(int x, int y, const std::vector<std::vector<int>> &board);
+        bool evaluate_piece(const int x,const int y, const std::vector<std::vector<int>> &board);
         std::string get_piece_string(int O, int X, int piece);
         int player;
         int SIZE;
+        std::map<int, float> situation_scores;
         std::set<std::string> win5_set;
         std::set<std::string> live4_set;
         std::set<std::string> open4_set;
@@ -213,6 +215,12 @@ class Evaluator{
 };
 
 Evaluator::Evaluator(int size, int player): SIZE{size}, player{player}{
+    situation_scores[WIN5] = 100000.0;
+    situation_scores[LIVE4] = 5.0;
+    situation_scores[OPEN4] = 2.0;
+    situation_scores[LIVE3] = 3.0;
+    situation_scores[OPEN3] = 1.0;
+
     // OOPOO
     win5_set.insert("OOOOO");
     
@@ -290,14 +298,63 @@ Evaluator::Evaluator(int size, int player): SIZE{size}, player{player}{
 };
 
 float Evaluator::evaluate(const std::vector<std::vector<int>> &board){
+    bool game_end = false;
+    float player1_final_score = 0;
+    float player2_final_score = 0;
     player1_score = PlayerScore(SIZE, 1);
     player2_score = PlayerScore(SIZE, 2);
 
+    // evaluate board
+    for(int x = 0; x < SIZE; x++){
+        for(int y = 0; y < SIZE; y++){
+            if(board[x][y] != 0){
+                if(evaluate_piece(x, y, board)){
+                    game_end = true;
+                    break;
+                }
+            }
+        }
+        if(game_end) break;
+    }
+
+    // caculate score
+
+    //check if someone wins
+    if(player1_score.situation_occurence[WIN5] > 0){
+        if(player == 1){
+            return std::numeric_limits<float>::max();
+        }
+        else{
+            return -std::numeric_limits<float>::max();
+        }
+    }
+    if(player2_score.situation_occurence[WIN5] > 0){
+        if(player == 2){
+            return std::numeric_limits<float>::max();
+        }
+        else{
+            return -std::numeric_limits<float>::max();
+        }
+    }
+
+    // other scores
+    for(int i = 1; i < 5; i++){
+        player1_final_score += (float)player1_score.situation_occurence[i] * situation_scores[i];
+        player2_final_score += (float)player2_score.situation_occurence[i] * situation_scores[i];
+    }
+
+    if(player = 1){
+        return player1_final_score - player2_final_score;
+    }
+    else{
+        return player2_final_score - player1_final_score;
+    }
 }
 
-bool Evaluator::evaluate_piece(int x, int y, const std::vector<std::vector<int>> &board){
+bool Evaluator::evaluate_piece(const int x, const int y, const std::vector<std::vector<int>> &board){
     //update player score # return true if wins (have win5)
     PlayerScore *curr_player;
+    std::string line;
     int O, X;
 
     //init curr player information
@@ -313,7 +370,7 @@ bool Evaluator::evaluate_piece(int x, int y, const std::vector<std::vector<int>>
     }
 
     //horizontal
-    std::string line;
+    line.clear();
     if(x - 2 > 0 && x + 2 < SIZE){
         //get 5 to check win5
         for(int i = -2; i <= 2; i++){
@@ -349,10 +406,117 @@ bool Evaluator::evaluate_piece(int x, int y, const std::vector<std::vector<int>>
     }
 
     //vertical
-    
+    line.clear();
+    if(y - 2 > 0 && y + 2 < SIZE){
+        //get 5 to check win5
+        for(int i = -2; i <= 2; i++){
+            line.append(get_piece_string(O, X, board[x][y+i]));
+        }
+
+        if(win5_set.find(line) != win5_set.cend()){
+            //if have win5 game is over return
+            curr_player->situation_occurence[WIN5]++;
+            return true;
+        }
+        else if(y + 3 < SIZE){
+            //get 6 to check open4 and live 4
+            line.append(get_piece_string(O, X, board[x][y+3]));
+
+            if(live4_set.find(line) != live4_set.cend()){
+                curr_player->situation_occurence[LIVE4]++;
+            }
+            else if(open4_set.find(line) != open4_set.cend()){
+                curr_player->situation_occurence[OPEN4]++;
+            }
+            else if(y - 3 > 0){
+                //get 7 to check open3 and live 3
+                line = get_piece_string(O, X, board[x][y-3]) + line;
+                if(live3_set.find(line) != live3_set.cend()){
+                    curr_player->situation_occurence[LIVE3]++;
+                }
+                else if(open3_set.find(line) != open3_set.cend()){
+                    curr_player->situation_occurence[OPEN3]++;
+                }
+            }  
+        }
+    }
+
+    //down right "\"
+    line.clear();
+    if(y - 2 > 0 && y + 2 < SIZE && x - 2 > 0 && x + 2 < SIZE){
+        //get 5 to check win5
+        for(int i = -2; i <= 2; i++){
+            line.append(get_piece_string(O, X, board[x+i][y+i]));
+        }
+
+        if(win5_set.find(line) != win5_set.cend()){
+            //if have win5 game is over return
+            curr_player->situation_occurence[WIN5]++;
+            return true;
+        }
+        else if(y + 3 < SIZE && x + 3 < SIZE){
+            //get 6 to check open4 and live 4
+            line.append(get_piece_string(O, X, board[x+3][y+3]));
+
+            if(live4_set.find(line) != live4_set.cend()){
+                curr_player->situation_occurence[LIVE4]++;
+            }
+            else if(open4_set.find(line) != open4_set.cend()){
+                curr_player->situation_occurence[OPEN4]++;
+            }
+            else if(y - 3 > 0 && x - 3 > 0){
+                //get 7 to check open3 and live 3
+                line = get_piece_string(O, X, board[x-3][y-3]) + line;
+                if(live3_set.find(line) != live3_set.cend()){
+                    curr_player->situation_occurence[LIVE3]++;
+                }
+                else if(open3_set.find(line) != open3_set.cend()){
+                    curr_player->situation_occurence[OPEN3]++;
+                }
+            }  
+        }
+    }
+
+    // up right '/'
+    line.clear();
+    if(y - 2 > 0 && y + 2 < SIZE && x - 2 > 0 && x + 2 < SIZE){
+        //get 5 to check win5
+        for(int i = -2; i <= 2; i++){
+            line.append(get_piece_string(O, X, board[x+i][y-i]));
+        }
+
+        if(win5_set.find(line) != win5_set.cend()){
+            //if have win5 game is over return
+            curr_player->situation_occurence[WIN5]++;
+            return true;
+        }
+        else if(y - 3 > 0 && x + 3 < SIZE){
+            //get 6 to check open4 and live 4
+            line.append(get_piece_string(O, X, board[x+3][y-3]));
+
+            if(live4_set.find(line) != live4_set.cend()){
+                curr_player->situation_occurence[LIVE4]++;
+            }
+            else if(open4_set.find(line) != open4_set.cend()){
+                curr_player->situation_occurence[OPEN4]++;
+            }
+            else if(y + 3 < SIZE && x - 3 > 0){
+                //get 7 to check open3 and live 3
+                line = get_piece_string(O, X, board[x-3][y+3]) + line;
+                if(live3_set.find(line) != live3_set.cend()){
+                    curr_player->situation_occurence[LIVE3]++;
+                }
+                else if(open3_set.find(line) != open3_set.cend()){
+                    curr_player->situation_occurence[OPEN3]++;
+                }
+            }  
+        }
+    }
+
+    return false;
 }
 
-std::string get_piece_string(int O, int X, int piece){
+std::string Evaluator::get_piece_string(int O, int X, int piece){
     switch(piece){
         case 0:
             return ".";
@@ -420,7 +584,7 @@ DecisionMaker::DecisionMaker(char **argv){
     init_directions();
 
     std::cout << "Initail board" << std::endl;
-    board.print();
+    //board.print();
 }
 
 DecisionMaker::~DecisionMaker(){
@@ -431,7 +595,7 @@ DecisionMaker::~DecisionMaker(){
 void DecisionMaker::find_next_step(){
     //create tree
     get_all_possible_steps();
-    print_possible_steps();  
+    //print_possible_steps();  
     create_tree(root, 1, player);
 
     //use alpha-beta pruning to get next step
