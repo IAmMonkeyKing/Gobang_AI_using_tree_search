@@ -6,6 +6,7 @@
 #include <vector>
 #include <set>
 #include <limits>
+#include <string>
 
 
 // ----- Point ----- //
@@ -168,27 +169,108 @@ void ChessBoard::print() const{
 }
 
 // ----- Evaluator ----- //
+enum SITUATION{
+    WIN5 = 0, //OOOOO
+    LIVE4 = 1, // .OOOO.
+    OPEN4 = 2, // XOOOO. or .O.OOO. or OO.OO one step to winning
+    LIVE3 = 3, //.OOO. or .O.OO.
+    OPEN3 = 4, // XOOO. or .O.OOX or .OO.OX
+};
 
 class Evaluator{
     //Get a map state and output its score
     public:
         Evaluator() {};
-        Evaluator(std::vector<std::vector<int>> &board);
-        float evaluate();
+        Evaluator(int size);
+        float evaluate(const std::vector<std::vector<int>> &board);
     private:
-        void get_lines(const std::vector<std::vector<int>> &board);
         int evaluate_line(std::vector<int> &line);
-        std::vector<std::vector<int>> horizontal_lines = std::vector<std::vector<int>>(15); //for lines "-"
-        std::vector<std::vector<int>> vertical_lines = std::vector<std::vector<int>>(15);   //for lines "|"
-        std::vector<std::vector<int>> up_right_lines = std::vector<std::vector<int>>(30);   //for lines "/"
-        std::vector<std::vector<int>> down_right_lines = std::vector<std::vector<int>>(30); //for lines "\"
+        int SIZE;
+        std::set<std::string> win5_set;
+        std::set<std::string> live4_set;
+        std::set<std::string> open4_set;
+        std::set<std::string> live3_set;
+        std::set<std::string> open3_set;
 };
 
-Evaluator::Evaluator(std::vector<std::vector<int>> &board){
+Evaluator::Evaluator(int size): SIZE{size}{
+    // OOPOO
+    win5_set.insert("OOOOO");
+    
+    // .OPOO.
+    live4_set.insert(".OOOO.");
 
-}
+    // XOPOO
+    open4_set.insert("XOOOO.");
+    open4_set.insert(".OOOOX");
 
-float Evaluator::evaluate(){
+    // O.POO
+    open4_set.insert("O.OOO.");
+    open4_set.insert("O.OOOX");
+    // OOP.O
+    open4_set.insert("XOOO.O");
+    open4_set.insert(".OOO.O");
+
+    // OP.OO
+    open4_set.insert(".OO.OO");
+    open4_set.insert("XOO.OO");
+
+    // OPO
+    live3_set.insert("..OOO..");
+    live3_set.insert("X.OOO..");
+    live3_set.insert("..OOO.X");
+    live3_set.insert("X.OOO.X");
+
+    // O.PO
+    live3_set.insert(".O.OO..");
+    live3_set.insert(".O.OO.X");
+    // OP.O
+    live3_set.insert("..OO.O.");
+    live3_set.insert("X.OO.O.");
+
+    // XOOP..
+    open3_set.insert("XOOO...");
+    open3_set.insert("XOOO..X");
+    // ..POOX
+    open3_set.insert("X..OOOX");
+    open3_set.insert("...OOOX");
+
+    // XOP.O.
+    open3_set.insert("XXOO.O.");
+    open3_set.insert(".XOO.O.");
+    // .O.POX
+    open3_set.insert(".O.OOXX");
+    open3_set.insert(".O.OOX.");
+    
+    // XO.POO.
+    open3_set.insert("XO.OO..");
+    open3_set.insert("XO.OO.X");
+    // .OP.OX
+    open3_set.insert("..OO.OX");
+    open3_set.insert("X.OO.OX");
+
+    // O..PO
+    open3_set.insert("O..OOXX");
+    open3_set.insert("O..OOX.");
+    open3_set.insert("O..OO.X");
+    open3_set.insert("O..OO..");
+    // OP..O
+    open3_set.insert("XXOO..O");
+    open3_set.insert("X.OO..O");
+    open3_set.insert(".XOO..O");
+    open3_set.insert("..OO..O");
+
+    // O.O.O
+    open3_set.insert(".O.O.O.");
+    open3_set.insert("XO.O.O.");
+    open3_set.insert(".O.O.OX");
+    open3_set.insert("XO.O.OX");
+
+    // X.OOO.X
+    open3_set.insert("X.OOO.X");
+};
+
+float Evaluator::evaluate(const std::vector<std::vector<int>> &board){
     return (float)(rand()%1000000);
 }
 
@@ -207,6 +289,7 @@ class DecisionMaker{
         void get_all_possible_steps();
         void init_directions();
         float alpha_beta_pruning(StateTreeNode &node, int depth, float alpha, float beta, bool is_player);
+        
         //basic information
         int player;
         int enemy;
@@ -218,12 +301,15 @@ class DecisionMaker{
         StateTreeNode root;
         std::vector<Point> directions;
         std::set<Point> possible_step_set;
+        Evaluator evaluator;
         //I/O
         std::ifstream fin;
         std::ofstream fout;
 };
 
 DecisionMaker::DecisionMaker(char **argv){
+    evaluator = Evaluator(SIZE);
+
     fin = std::ifstream(argv[1]);
     fout = std::ofstream(argv[2]);
 
@@ -243,22 +329,19 @@ DecisionMaker::~DecisionMaker(){
     fout.close();
 }
 
-
 void DecisionMaker::find_next_step(){
     //create tree
     get_all_possible_steps();
     print_possible_steps();  
     create_tree(root, 1, player);
-    //print_tree(root);
 
     //use alpha-beta pruning to get next step
     float final_value = alpha_beta_pruning(root, 1, -std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), true);
     std::cout << "Final_value : " << final_value << std::endl;
     float max_value = -std::numeric_limits<float>::max();
-    for(auto child:root.childs){
-        std::cout << "child value : " << child.value << " x : " << child.placement.x << " y : " << child.placement.y << std::endl;
+    for(auto &child:root.childs){
+        //std::cout << "child value : " << child.value << " x : " << child.placement.x << " y : " << child.placement.y << std::endl;
         max_value = std::max(child.value, max_value);
-        //std::cout << max_value << " | " << child.placement.x << ' ' << child.placement.y << std::endl;
         if(max_value == child.value){
             fout << child.placement.x << ' ' << child.placement.y << std::endl;
         }
@@ -285,9 +368,9 @@ void DecisionMaker::print_tree(StateTreeNode &node) const{
 }
 
 void DecisionMaker::create_tree(StateTreeNode &node, int depth, int curr_player){
-    //std::cout << "depth: " << depth << " node : " << node.placement << std::endl;
     if(depth >= DEPTH)return;
     int next_player = (curr_player == 1) ? 2:1;
+    
     //create childs
     for(auto possible_step : possible_step_set){
         node.childs.push_back(StateTreeNode(possible_step, next_player, &node));
@@ -351,8 +434,7 @@ void DecisionMaker::get_all_possible_steps(){
 
 float DecisionMaker::alpha_beta_pruning(StateTreeNode &node, int depth, float alpha, float beta, bool is_player){
     if(depth >= DEPTH){
-        Evaluator evaluator = Evaluator(board.board);
-        node.value = evaluator.evaluate();
+        node.value = evaluator.evaluate(board.board);
         return node.value;
     }
     if(is_player){
