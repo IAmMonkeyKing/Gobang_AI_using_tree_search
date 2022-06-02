@@ -177,23 +177,42 @@ enum SITUATION{
     OPEN3 = 4, // XOOO. or .O.OOX or .OO.OX
 };
 
+class PlayerScore{
+    public:
+        PlayerScore();
+        PlayerScore(int size, int player);
+        friend class Evaluator;
+    private:
+        int SIZE;
+        int player;
+        std::vector<int> situation_occurence; 
+};
+
+PlayerScore::PlayerScore(int size, int player): SIZE{size}, player{player} {
+    situation_occurence = std::vector<int>(5, 0);
+};
+
 class Evaluator{
     //Get a map state and output its score
     public:
         Evaluator() {};
-        Evaluator(int size);
+        Evaluator(int size, int player);
         float evaluate(const std::vector<std::vector<int>> &board);
     private:
-        int evaluate_line(std::vector<int> &line);
+        bool evaluate_piece(int x, int y, const std::vector<std::vector<int>> &board);
+        std::string get_piece_string(int O, int X, int piece);
+        int player;
         int SIZE;
         std::set<std::string> win5_set;
         std::set<std::string> live4_set;
         std::set<std::string> open4_set;
         std::set<std::string> live3_set;
         std::set<std::string> open3_set;
+        PlayerScore player1_score;
+        PlayerScore player2_score;
 };
 
-Evaluator::Evaluator(int size): SIZE{size}{
+Evaluator::Evaluator(int size, int player): SIZE{size}, player{player}{
     // OOPOO
     win5_set.insert("OOOOO");
     
@@ -271,7 +290,87 @@ Evaluator::Evaluator(int size): SIZE{size}{
 };
 
 float Evaluator::evaluate(const std::vector<std::vector<int>> &board){
-    return (float)(rand()%1000000);
+    player1_score = PlayerScore(SIZE, 1);
+    player2_score = PlayerScore(SIZE, 2);
+
+}
+
+bool Evaluator::evaluate_piece(int x, int y, const std::vector<std::vector<int>> &board){
+    //update player score # return true if wins (have win5)
+    PlayerScore *curr_player;
+    int O, X;
+
+    //init curr player information
+    if(board[x][y] == 1){
+        curr_player = &player1_score;
+        O = 1;
+        X = 2;
+    }
+    else{
+        curr_player = &player2_score;
+        O = 2;
+        X = 1;
+    }
+
+    //horizontal
+    std::string line;
+    if(x - 2 > 0 && x + 2 < SIZE){
+        //get 5 to check win5
+        for(int i = -2; i <= 2; i++){
+            line.append(get_piece_string(O, X, board[x+i][y]));
+        }
+
+        if(win5_set.find(line) != win5_set.cend()){
+            //if have win5 game is over return
+            curr_player->situation_occurence[WIN5]++;
+            return true;
+        }
+        else if(x + 3 < SIZE){
+            //get 6 to check open4 and live 4
+            line.append(get_piece_string(O, X, board[x+3][y]));
+
+            if(live4_set.find(line) != live4_set.cend()){
+                curr_player->situation_occurence[LIVE4]++;
+            }
+            else if(open4_set.find(line) != open4_set.cend()){
+                curr_player->situation_occurence[OPEN4]++;
+            }
+            else if(x - 3 > 0){
+                //get 7 to check open3 and live 3
+                line = get_piece_string(O, X, board[x-3][y]) + line;
+                if(live3_set.find(line) != live3_set.cend()){
+                    curr_player->situation_occurence[LIVE3]++;
+                }
+                else if(open3_set.find(line) != open3_set.cend()){
+                    curr_player->situation_occurence[OPEN3]++;
+                }
+            }  
+        }
+    }
+
+    //vertical
+    
+}
+
+std::string get_piece_string(int O, int X, int piece){
+    switch(piece){
+        case 0:
+            return ".";
+        case 1:
+            if(O == 1){
+                return "O";
+            }
+            else{
+                return "X";
+            }
+        case 2:
+            if(O == 2){
+                return "O";
+            }
+            else{
+                return "X";
+            }
+    }
 }
 
 // ----- Decision maker ----- //
@@ -308,7 +407,6 @@ class DecisionMaker{
 };
 
 DecisionMaker::DecisionMaker(char **argv){
-    evaluator = Evaluator(SIZE);
 
     fin = std::ifstream(argv[1]);
     fout = std::ofstream(argv[2]);
@@ -316,6 +414,7 @@ DecisionMaker::DecisionMaker(char **argv){
     //get board
     fin >> player;
     enemy = (player == 1) ? 2:1;            
+    evaluator = Evaluator(SIZE, player);
     root = StateTreeNode(player);
     board = ChessBoard(SIZE, fin);
     init_directions();
